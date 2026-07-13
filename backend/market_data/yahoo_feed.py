@@ -41,11 +41,11 @@ def verify_ticker(symbol: str) -> tuple[bool, str]:
     if not symbol or not symbol.strip():
         return False, "Empty ticker."
     try:
-        data = yf.Ticker(symbol.strip()).history(period="5d", interval="1d")
+        price = yf.Ticker(symbol.strip()).fast_info.get("lastPrice")
     except Exception as exc:
         logger.warning("Ticker verification failed for %s: %s", symbol, exc)
         return False, f"Could not verify '{symbol}' on Yahoo Finance ({exc})."
-    if data.empty:
+    if price is None:
         return False, f"'{symbol}' returned no data -- it may not be a valid ticker."
     return True, "OK"
 
