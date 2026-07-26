@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# LLM provider configuration.
+#
+# This is the ONLY place you should need to touch to switch the model
+# powering every agent (parser, validator, explainer, news sentiment)
+# between Gemini, Claude, OpenAI, or an OpenAI-compatible local server.
+# No code changes required -- see agents/llm/factory.py for how this file
+# is consumed, and README.md in this folder for the full option list.
+#
+# The actual API key is read from an environment variable (never put a
+# key in this file) -- set it in your .env or shell environment using the
+# variable name given by `api_key_env` below.
+# ---------------------------------------------------------------------------
+
+# llm:
+  # One of: gemini | openai | anthropic (alias: claude) | any custom
+  # provider you've registered with agents.llm.factory.register_provider()
+  # provider: gemini
+  # Exact model identifier for the chosen provider. Check the provider's
+  # docs for current model names -- these change over time.
+  # model: models/gemini-3.1-flash-lite
+
+  # Name of the environment variable holding the API key for this provider.
+  # api_key_env: API_KEY
+
+  # Optional, provider-dependent. Omit to use the provider's defaults.
+  # temperature: 0.2
+  # max_tokens: 1024
+
+  # OpenAI-only: point at an OpenAI-compatible endpoint (Azure gateway,
+  # a local vLLM/Ollama server, etc.) instead of the public OpenAI API.
+  # base_url: http://localhost:11434/v1
+
+# ---------------------------------------------------------------------------
+# Examples for the other built-in providers -- copy one of these blocks
+# over the `llm:` block above to switch. Only one `llm:` block is active
+# at a time; these are left here, commented out, purely as a reference.
+# ---------------------------------------------------------------------------
+
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-5
+#   api_key_env: ANTHROPIC_API_KEY
+#   max_tokens: 1024
+provider: openrouter
+model: openrouter/auto
+temperature: 0
+max_tokens: 1200

@@ -24,9 +24,6 @@ def validate_rule_schema(rule: dict) -> list[str]:
     instrument = rule.get("instrument")
     if not instrument or not isinstance(instrument, str):
         problems.append("No instrument/ticker was extracted -- this input may not describe a trade condition at all.")
-    elif not TICKER_PATTERN.match(instrument.upper()):
-        problems.append(f"'{instrument}' doesn't look like a valid ticker symbol.")
- 
     if rule.get("condition_type") not in VALID_CONDITION_TYPES:
         problems.append(f"Unrecognized or missing condition type: {rule.get('condition_type')!r}")
  
@@ -47,9 +44,13 @@ def validate_rule_schema(rule: dict) -> list[str]:
                 if not (isinstance(value, (list, tuple)) and len(value) == 2
                         and all(isinstance(v, (int, float)) for v in value)):
                     problems.append(f"Condition {i}: 'between' requires two numbers [low, high].")
-            elif not isinstance(value, (int, float)):
-                problems.append(f"Condition {i}: value must be a number, got {value!r}")
- 
+            indicator = cond.get("indicator_name")
+            if indicator is None:
+                if not isinstance(value, (int, float)):
+                    problems.append(
+                    f"Condition {i}: value must be a number."
+                )
+
             if cond.get("type") == "indicator" and cond.get("indicator_name") not in VALID_INDICATORS:
                 problems.append(f"Condition {i}: unsupported indicator {cond.get('indicator_name')!r}")
  

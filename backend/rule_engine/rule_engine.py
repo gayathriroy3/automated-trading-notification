@@ -234,6 +234,10 @@ class RuleEngine:
                 "conditions": cond_statuses,
                 "all_met": (all(c["met"] for c in cond_statuses) if rule.logic_operator == "AND"
                             else any(c["met"] for c in cond_statuses)),
+                "last_price": state.last_price,
+                "last_volume": state.last_volume,
+                "market_open": state.market_open,
+                "last_bar_time": time.time()
             }
         return snapshot
 

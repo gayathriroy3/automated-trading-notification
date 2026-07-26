@@ -34,7 +34,7 @@ try:
 except ImportError:
     pass
 
-from agents.orchestrator import AgentError, Orchestrator, sentiment_contradicts_direction
+from agents.orchestrator import AgentError, Orchestrator
 from backend.database.db import (
     DatabaseError, init_db, save_rule, get_active_rules, mark_rule_status,
     save_notification, get_notifications, update_notification_action,
@@ -42,7 +42,7 @@ from backend.database.db import (
     get_rule_history, save_rule_status, get_rule_statuses,
 )
 from backend.rule_engine.rule_engine import Rule, Condition, ConditionType, Comparator, RuleEngine
-from backend.market_data.yahoo_feed import YahooFeed, verify_ticker, fetch_recent_news
+from backend.market_data.yahoo_feed import YahooFeed, verify_ticker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,12 +59,19 @@ for key, default in [
 if st.session_state.orchestrator is None:
     st.session_state.orchestrator = Orchestrator()
 
-if not os.environ.get("GEMINI_API_KEY"):
-    st.warning(
-        "GEMINI_API_KEY is not set. The condition parser, validator, "
-        "explanation, and news-sentiment agents all need it -- the History "
-        "and Why not yet tabs will still work without it."
-    )
+try:
+    from agents.llm.factory import load_llm_config
+    _llm_cfg = load_llm_config()
+    _api_key_env = _llm_cfg.get("api_key_env", "")
+    if _api_key_env and not os.environ.get(_api_key_env):
+        st.warning(
+            f"config/llm_config.yaml selects provider '{_llm_cfg.get('provider')}' but "
+            f"'{_api_key_env}' is not set. The condition parser, validator, explanation, "
+            "and news-sentiment agents all need it -- the History and Why not yet tabs "
+            "will still work without it."
+        )
+except AgentError as exc:
+    st.warning(f"LLM config problem: {exc}")
 
 
 def dict_to_rule(d: dict, raw_text: str, rule_id: str | None = None) -> Rule:
@@ -105,15 +112,7 @@ def run_poller(symbols: list[str], stop_event: threading.Event, poll_seconds: in
             reason = orchestrator.explainer.explain(
                 event.instrument, event.rule.condition_type, event.matched_values
             )
-
             caution = None
-            if event.rule.condition_type in {"entry_buy", "entry_sell"}:
-                headlines = fetch_recent_news(event.instrument)
-                sentiment = orchestrator.news_agent.analyze(event.instrument, headlines)
-                if sentiment_contradicts_direction(event.rule.condition_type, sentiment["sentiment"]):
-                    caution = (f"Trade setup satisfied, but recent news sentiment is "
-                               f"{sentiment['sentiment'].replace('_', ' ')}: {sentiment['summary']} "
-                               f"Proceed carefully.")
 
             save_notification(
                 instrument=event.instrument, condition_type=event.rule.condition_type,
@@ -146,8 +145,8 @@ def run_poller(symbols: list[str], stop_event: threading.Event, poll_seconds: in
     logger.info("Poller stopped.")
 
 
-tab_setup, tab_monitor, tab_pending, tab_history = st.tabs(
-    ["Set conditions", "Live monitor", "Why not yet", "History"]
+tab_setup, tab_monitor, tab_history = st.tabs(
+    ["Set conditions", "Live monitor", "History"]
 )
 
 # ---------------------------------------------------------------------------
@@ -255,48 +254,62 @@ with tab_monitor:
         st.session_state.poller_stop_event = None
         st.rerun()
     if is_running:
-        st.success("Poller running in the background.")  
+
+        statuses = get_rule_statuses(
+            [r["rule_id"] for r in active]
+        )
+
+        if not statuses:
+            st.info("Waiting for first market update...")
+        else:
+            for row in active:
+                status = statuses.get(row["rule_id"])
+                if not status:
+                    continue
+                rule = json.loads(row["rule_json"])
+                with st.container(border=True):
+                    st.subheader(rule["instrument"])
+                    st.write("**Condition**")
+                    st.code(row["raw_input"])
+                    st.metric(
+                        "Current Price",
+                        f"{status.get('last_price', 'N/A')}"
+                    )
+
+                    # ---------- MARKET CLOSED ----------
+                    if not status.get("market_open", True):
+
+                        st.warning(
+                            "Market is currently closed.\n\n"
+                            f"Last traded price: {status.get('last_price', 'N/A')}\n"
+                            f"Last update: {pd.to_datetime(status['last_bar_time'], unit='s')}"
+                        )
+
+                    # ---------- RULE TRIGGERED ----------
+                    elif status.get("all_met"):
+
+                        st.success("✅ Rule conditions satisfied.")
+
+                    # ---------- WAITING ----------
+                    else:
+
+                        st.info(status.get(
+                            "explanation",
+                            "Waiting for next market update..."
+                        ))
+
+                    st.caption(
+                        "Last Checked: "
+                        + pd.to_datetime(
+                            status["updated_at"],
+                            unit="s"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    )
     else:
         st.caption("Monitoring is stopped.")
 
 # ---------------------------------------------------------------------------
-# Tab 3 -- "why not yet": live, continuously-updating gap to each rule
-# ---------------------------------------------------------------------------
-with tab_pending:
-    st.subheader("Why hasn't this fired yet?")
-    st.caption(
-        "Updated by the background poller every cycle. This is plain arithmetic against "
-        "live market data, not an LLM call -- refresh to see the latest snapshot."
-    )
-    if st.button("Refresh"):
-        st.rerun()
-
-    active = get_active_rules()
-    statuses = get_rule_statuses([r["rule_id"] for r in active])
-
-    if not active:
-        st.info("No active rules to track.")
-    elif not statuses:
-        st.info("No status yet -- start monitoring in the 'Live monitor' tab.")
-    else:
-        for rule in active:
-            status = statuses.get(rule["rule_id"])
-            if not status:
-                continue
-            header = f"{status['instrument']} — {status['condition_type']} (v{rule['version']})"
-            with st.expander(header, expanded=not status["all_met"]):
-                for c in status["conditions"]:
-                    icon = "✅" if c["met"] else "⏳"
-                    if c["current"] is None:
-                        st.write(f"{icon} {c['target']} -- waiting on first price data")
-                    elif c["met"]:
-                        st.write(f"{icon} {c['target']} -- currently {c['current']} (met)")
-                    else:
-                        st.write(f"{icon} {c['target']} -- currently {c['current']}, "
-                                 f"{c['distance']} away")
-
-# ---------------------------------------------------------------------------
-# Tab 4 -- notification history, with version + news-sentiment caution
+# Tab 3 -- notification history, with version + news-sentiment caution
 # ---------------------------------------------------------------------------
 with tab_history:
     st.subheader("Notification history")
@@ -328,14 +341,53 @@ with tab_history:
                             marker = " (this one)" if v["rule_id"] == rule["rule_id"] else ""
                             st.write(f"v{v['version']} [{v['status']}]: \"{v['raw_input']}\"{marker}")
 
-                action = st.selectbox(
-                    "Action", ["", "took_trade", "skipped"],
-                    index=["", "took_trade", "skipped"].index(row["action"]),
-                    key=f"action_{row['id']}",
-                )
-                if action != row["action"]:
-                    try:
-                        update_notification_action(row["id"], action)
-                        st.rerun()
-                    except DatabaseError as exc:
-                        st.error(f"Couldn't update action: {exc}")
+                # Already submitted
+                if row["action"]:
+
+                    pretty = {
+                        "took_trade": "✅ Took Trade",
+                        "skipped": "❌ Skipped Trade"
+                    }
+
+                    st.success(
+                        f"Trade Outcome: {pretty.get(row['action'], row['action'])}"
+                    )
+
+                else:
+
+                    action = st.radio(
+                        "Trade Outcome",
+                        [
+                            "took_trade",
+                            "skipped"
+                        ],
+                        format_func=lambda x: {
+                            "took_trade": "✅ Took Trade",
+                            "skipped": "❌ Skipped Trade"
+                        }[x],
+                        key=f"radio_{row['id']}"
+                    )
+
+                    if st.button(
+                        "Submit",
+                        key=f"submit_{row['id']}"
+                    ):
+
+                        try:
+
+                            update_notification_action(
+                                row["id"],
+                                action
+                            )
+
+                            st.success(
+                                "Trade outcome saved successfully."
+                            )
+
+                            st.rerun()
+
+                        except DatabaseError as exc:
+
+                            st.error(
+                                f"Couldn't save outcome: {exc}"
+                            )

@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# News resources for the News Sentiment Agent.
+#
+# The agent (agents/sentiment/sentiment_agent.py) never names a resource
+# directly -- at trigger time it asks agents/news/aggregator.py for
+# headlines, and the aggregator builds exactly the resources listed below.
+# Add a block to check a new resource, delete one to stop checking it,
+# flip `enabled` to pause it without deleting the config, or edit a
+# resource's own settings (a different RSS url, a higher per-source
+# limit, ...). None of that requires touching agent code.
+#
+# Built-in resource types (see agents/news/sources/): yahoo_finance, rss,
+# newsapi, static_file. Register a new type at runtime with
+# agents.news.aggregator.register_source_type() -- e.g. a Bloomberg
+# Terminal export, a broker's proprietary feed, an internal research tool.
+# ---------------------------------------------------------------------------
+
+news_sources:
+  - type: yahoo_finance
+    enabled: true
+    limit: 5
+
+  # Example: a general market-news RSS feed, filtered down to items that
+  # mention the instrument being checked.
+  # - type: rss
+  #   name: moneycontrol_markets
+  #   enabled: true
+  #   url: https://www.moneycontrol.com/rss/marketreports.xml
+  #   limit: 5
+  #   filter_by_instrument: true
+
+  # Example: NewsAPI.org for broader coverage beyond Yahoo Finance.
+  # - type: newsapi
+  #   name: newsapi
+  #   enabled: false
+  #   api_key_env: NEWSAPI_KEY
+  #   query_suffix: stock
+  #   limit: 5
+
+  # Example: a curated/offline resource, or a fixture used by tests.
+  # - type: static_file
+  #   name: analyst_notes
+  #   enabled: false
+  #   path: config/fixtures/sample_static_news.json
+  #   limit: 5
+
+aggregation:
+  # Hard cap on total headlines handed to the LLM, after combining every
+  # enabled source above -- keeps the prompt bounded no matter how many
+  # resources are configured.
+  max_total_headlines: 15
+  # Drop duplicate headlines (case-insensitive exact title match) that
+  # show up in more than one source.
+  dedupe: true

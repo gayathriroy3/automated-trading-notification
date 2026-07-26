@@ -15,7 +15,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 import yfinance as yf
-
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import time
 logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = {"Close", "Volume"}
@@ -27,49 +29,32 @@ class Bar:
     timestamp: float
     close: float
     volume: float
+    market_open: bool
 
 
 def verify_ticker(symbol: str) -> tuple[bool, str]:
-    """Confirms a ticker actually resolves on Yahoo Finance before it's
-    allowed into a live rule. This is what stops a hallucinated or
-    mistyped ticker (e.g. the LLM or the trader typing "APPL") from ever
-    reaching the poller and blowing up mid-session.
-
-    Uses daily bars, not the 1-minute interval the live poller uses, so
-    this works regardless of whether the market is currently open.
     """
-    if not symbol or not symbol.strip():
+    Verifies that a symbol exists on Yahoo Finance.
+
+    Uses historical data instead of fast_info because fast_info is
+    inconsistent for indices, ETFs and some international securities.
+    """
+    symbol = symbol.strip()
+
+    if not symbol:
         return False, "Empty ticker."
+
     try:
-        price = yf.Ticker(symbol.strip()).fast_info.get("lastPrice")
+        history = yf.Ticker(symbol).history(period="5d")
+
+        if history.empty:
+            return False, f"'{symbol}' returned no historical data."
+
+        return True, "OK"
+
     except Exception as exc:
         logger.warning("Ticker verification failed for %s: %s", symbol, exc)
-        return False, f"Could not verify '{symbol}' on Yahoo Finance ({exc})."
-    if price is None:
-        return False, f"'{symbol}' returned no data -- it may not be a valid ticker."
-    return True, "OK"
-
-
-def fetch_recent_news(symbol: str, limit: int = 5) -> list[str]:
-    """Free news headlines via yfinance -- no separate news API needed,
-    consistent with keeping this project zero-cost. Best-effort: returns
-    an empty list on any failure rather than raising, since a missing news
-    check shouldn't block a trigger notification from going out.
-
-    yfinance's .news response shape has changed across versions (some
-    nest the title under 'content'), so extraction is defensive."""
-    try:
-        items = yf.Ticker(symbol).news or []
-    except Exception as exc:
-        logger.warning("News fetch failed for %s: %s", symbol, exc)
-        return []
-
-    headlines = []
-    for item in items[:limit]:
-        title = item.get("title") or (item.get("content") or {}).get("title")
-        if title:
-            headlines.append(title)
-    return headlines
+        return False, f"Could not verify '{symbol}' ({exc})"
 
 
 class YahooFeed:
@@ -87,7 +72,8 @@ class YahooFeed:
         bars = []
         for symbol in self.symbols:
             try:
-                data = yf.Ticker(symbol).history(period="1d", interval=self.interval)
+                data = yf.Ticker(symbol).history(period="2d", interval=self.interval)
+
             except Exception as exc:
                 self._consecutive_failures[symbol] = self._consecutive_failures.get(symbol, 0) + 1
                 count = self._consecutive_failures[symbol]
@@ -106,12 +92,39 @@ class YahooFeed:
 
             last = data.iloc[-1]
             close, volume = last.get("Close"), last.get("Volume")
+            ist = ZoneInfo("Asia/Kolkata")  
+            current = datetime.now(ist)
+            last_ts = last.name.to_pydatetime().timestamp()
+            now = time.time()
+
+            within_hours = (
+                current.weekday() < 5 and
+                (
+                    (current.hour > 9 or (current.hour == 9 and current.minute >= 15))
+                    and
+                    (current.hour < 15 or (current.hour == 15 and current.minute <= 30))
+                )
+            )
+
+            fresh_data = (now - last_ts) < 20 * 60
+
+            market_open = within_hours and fresh_data
+
             if pd.isna(close):
                 continue
 
             ts = last.name.timestamp()
             if self._last_ts.get(symbol) == ts:
-                continue  # same candle as last poll, nothing new
+                bars.append(
+                    Bar(
+                        symbol=symbol,
+                        timestamp=ts,
+                        close=float(close),
+                        volume=float(volume) if not pd.isna(volume) else 0.0,
+                        market_open=market_open,
+                    )
+                )
+                continue # same candle as last poll, nothing new
             self._last_ts[symbol] = ts
 
             bars.append(Bar(
@@ -119,6 +132,7 @@ class YahooFeed:
                 timestamp=ts,
                 close=float(close),
                 volume=float(volume) if not pd.isna(volume) else 0.0,
+                market_open=market_open
             ))
         return bars
 

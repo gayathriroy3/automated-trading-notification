@@ -24,7 +24,6 @@ from agents.exceptions.agent_exception import AgentError
 from agents.explainer.explainer_agent import ExplanationAgent
 from agents.parser.parser_agent import ConditionParserAgent
 from agents.parser.schema_validator import validate_rule_schema
-from agents.sentiment.sentiment_agent import NewsSentimentAgent
 from agents.validator.validator_agent import ValidationAgent
 from backend.rule_engine.conflict_checker import check_deterministic_conflicts
 
@@ -58,7 +57,6 @@ class Orchestrator:
         self.parser = ConditionParserAgent()
         self.validator = ValidationAgent()
         self.explainer = ExplanationAgent()
-        self.news_agent = NewsSentimentAgent()
  
     def process_new_condition(self, raw_text: str, existing_rules: list) -> OrchestrationResult:
         parsed = self.parser.parse(raw_text)
