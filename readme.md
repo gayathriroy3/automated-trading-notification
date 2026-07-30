@@ -1,6 +1,6 @@
 # High level architecture:
 
-[](portfolio_project_high_level.png)
+[Architecture High Level](portfolio_project_high_level.png)
 
 
 # Configuration
