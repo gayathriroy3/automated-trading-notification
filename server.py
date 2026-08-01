@@ -50,7 +50,9 @@ orchestrator = Orchestrator()
 
 app = FastAPI(
     title="Trade Discipline API",
-    root_path="/api")
+    version="0.1.0",
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
