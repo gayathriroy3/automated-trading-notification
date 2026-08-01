@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-ink: #0E1417;
+  --color-surface: #151C20;
+  --color-surface-raised: #1C2429;
+  --color-rail: #262F35;
+  --color-hairline: #2A3338;
+  --color-text: #E7EDEF;
+  --color-muted: #8B9BA1;
+  --color-faint: #5C6A70;
+
+  --color-signal-active: #5B8DBE;
+  --color-signal-active-dim: #3A536B;
+  --color-signal-buy: #4FAE7F;
+  --color-signal-buy-dim: #2E4A3D;
+  --color-signal-risk: #C8553D;
+  --color-signal-risk-dim: #4A322A;
+  --color-signal-wait: #E0A458;
+  --color-signal-wait-dim: #4A3D28;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-signal-active-dim);
+}
+
+/* ticket-stub rail: colored left edge + perforation dots, the page's
+   one recurring signature element for anything that represents a
+   live position -- a rule card, a status row, a notification. */
+.ticket {
+  position: relative;
+  border-left: 3px solid var(--rail-color, var(--color-hairline));
+  padding-left: 1.1rem;
+}
+.ticket::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--rail-color, var(--color-hairline)) 0,
+    var(--rail-color, var(--color-hairline)) 6px,
+    transparent 6px,
+    transparent 11px
+  );
+  opacity: 0.55;
+}
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.pulse-dot {
+  animation: blink-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot { animation: none; }
+  * { transition: none !important; }
+}

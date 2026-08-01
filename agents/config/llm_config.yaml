@@ -44,5 +44,6 @@
 #   max_tokens: 1024
 provider: openrouter
 model: openrouter/auto
+api_key_env: OPENROUTER_API_KEY
 temperature: 0
 max_tokens: 1200
