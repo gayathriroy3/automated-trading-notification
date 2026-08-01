@@ -52,7 +52,6 @@ app = FastAPI(
     title="Trade Discipline API",
     version="0.1.0",
     docs_url="/docs",
-    root_path="/api",
     openapi_url="/openapi.json")
 app.add_middleware(
     CORSMiddleware,
