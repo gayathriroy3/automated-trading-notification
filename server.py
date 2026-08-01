@@ -48,7 +48,9 @@ logger = logging.getLogger(__name__)
 init_db()
 orchestrator = Orchestrator()
 
-app = FastAPI(title="Trade Discipline API")
+app = FastAPI(
+    title="Trade Discipline API",
+    root_path="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
