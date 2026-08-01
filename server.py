@@ -152,7 +152,7 @@ class ActionRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Startup / config
 # ---------------------------------------------------------------------------
-@app.get("/api/config/status")
+@app.get("/config/status")
 def config_status():
     try:
         from agents.llm.factory import load_llm_config
@@ -176,7 +176,7 @@ def config_status():
 # ---------------------------------------------------------------------------
 # Tab 1 -- conditions
 # ---------------------------------------------------------------------------
-@app.post("/api/conditions/parse")
+@app.post("/conditions/parse")
 def parse_condition(req: ParseRequest):
     if not req.raw_text.strip():
         raise HTTPException(400, "Condition text is required.")
@@ -211,7 +211,7 @@ def parse_condition(req: ParseRequest):
     return payload
 
 
-@app.post("/api/conditions/save")
+@app.post("/conditions/save")
 def save_condition(req: SaveRuleRequest):
     try:
         rule_id = save_rule(req.rule, req.raw_text, strategy_key=req.strategy_key)
@@ -220,7 +220,7 @@ def save_condition(req: SaveRuleRequest):
     return {"rule_id": rule_id}
 
 
-@app.get("/api/rules/active")
+@app.get("/rules/active")
 def list_active_rules():
     rows = get_active_rules()
     if rows is None:
@@ -243,7 +243,7 @@ def list_active_rules():
 # ---------------------------------------------------------------------------
 # Tab 2 -- live monitor
 # ---------------------------------------------------------------------------
-@app.post("/api/monitor/start")
+@app.post("/monitor/start")
 def start_monitor():
     global _poller_stop_event, _poller_symbols
     with _poller_lock:
@@ -260,7 +260,7 @@ def start_monitor():
     return {"running": True, "symbols": symbols}
 
 
-@app.post("/api/monitor/stop")
+@app.post("/monitor/stop")
 def stop_monitor():
     global _poller_stop_event, _poller_symbols
     with _poller_lock:
@@ -272,7 +272,7 @@ def stop_monitor():
     return {"running": False}
 
 
-@app.get("/api/monitor/status")
+@app.get("/monitor/status")
 def monitor_status():
     with _poller_lock:
         running = _poller_stop_event is not None
@@ -299,7 +299,7 @@ def monitor_status():
 # ---------------------------------------------------------------------------
 # Tab 3 -- history
 # ---------------------------------------------------------------------------
-@app.get("/api/notifications")
+@app.get("/notifications")
 def list_notifications(date: Optional[str] = None, order: str = "desc"):
     date_filter = None
     if date:
@@ -328,7 +328,7 @@ def list_notifications(date: Optional[str] = None, order: str = "desc"):
     return out
 
 
-@app.post("/api/notifications/{notif_id}/action")
+@app.post("/notifications/{notif_id}/action")
 def submit_action(notif_id: str, req: ActionRequest):
     if req.action not in ("took_trade", "skipped"):
         raise HTTPException(400, "action must be 'took_trade' or 'skipped'.")
